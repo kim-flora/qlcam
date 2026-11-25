@@ -1,7 +1,7 @@
 <!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kim Flora · Quay đơn</title>
-<style>*{box-sizing:border-box}body{margin:auto;max-width:640px;padding:24px;background:#f5f2eb;color:#263d34;font:16px/1.5 system-ui}header{font-family:Georgia,serif;font-size:25px;border-bottom:1px solid #c5cbc0;padding:10px 0}h1{font:normal 36px Georgia,serif}input,button,a.download{font:inherit;border:1px solid #99a79b;border-radius:9px;padding:12px;margin:5px 0}input{width:100%;background:white}button,a.download{background:#264c40;color:white;cursor:pointer}button:disabled{opacity:.45}canvas,video{width:100%;border-radius:12px;background:#19231f}#src{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}article{border-top:1px solid #ccc;padding:12px 0}small{display:block}a.download{display:inline-block;text-decoration:none}[hidden]{display:none!important}</style>
+<style>*{box-sizing:border-box}body{margin:auto;max-width:640px;padding:24px;background:#f5f2eb;color:#263d34;font:16px/1.5 system-ui}header{font-family:Georgia,serif;font-size:25px;border-bottom:1px solid #c5cbc0;padding:10px 0}h1{font:normal 36px Georgia,serif}input,button,a.download{font:inherit;border:1px solid #99a79b;border-radius:9px;padding:12px;margin:5px 0}input{width:100%;background:white}button,a.download{background:#264c40;color:white;cursor:pointer}button:disabled{opacity:.45}canvas,video{width:100%;border-radius:12px;background:#19231f}#src{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}article{border-top:1px solid #ccc;padding:12px 0}small{display:block}a.download{display:inline-block;text-decoration:none}[hidden]{display:none!important}#screen{display:block;max-height:54vh;object-fit:contain}.controls{position:sticky;bottom:0;z-index:5;background:#f5f2eb;padding:8px 0 max(8px,env(safe-area-inset-bottom));display:grid}.controls button{min-height:52px}#stop{background:#943d34}</style>
 <header>Kim Flora</header><form id="login"><h1>Đăng nhập</h1><label>Mật khẩu của shop<input id="pw" type="password" required autocomplete="current-password"></label><button>Đăng nhập</button></form>
-<main hidden id="app"><h1>Quay đơn đóng gói</h1><label>Mã vận đơn<input id="order" maxlength="64" placeholder="Nhập mã trên tem"></label><button id="camera">Mở camera sau</button> <button id="scan" hidden>Quét mã</button><video id="src" muted playsinline></video><canvas hidden id="screen"></canvas><button disabled id="record">Bắt đầu quay</button> <button disabled id="stop">Kết thúc</button><small>Giữ màn hình mở trong lúc quay. Clip ghi hình không kèm âm thanh.</small><section id="latest"></section><h2>Clip trên máy này</h2><input id="query" placeholder="Tìm theo mã hoặc ngày" aria-label="Tìm clip"><section id="list"></section><button id="logout">Đăng xuất</button></main><p role="status" id="msg"></p>
+<main hidden id="app"><h1>Quay đơn đóng gói</h1><label>Mã vận đơn<input id="order" maxlength="64" placeholder="Nhập mã trên tem"></label><button id="camera">Mở camera sau</button> <button id="scan" hidden>Quét mã</button><video id="src" muted playsinline></video><canvas hidden id="screen"></canvas><div class="controls"><span id="progress" role="status"></span><button type="button" disabled id="record">Bắt đầu quay</button><button type="button" hidden id="stop">Dừng và lưu clip</button></div><small>Giữ màn hình mở trong lúc quay. Clip ghi hình không kèm âm thanh.</small><section id="latest"></section><h2>Clip trên máy này</h2><input id="query" placeholder="Tìm theo mã hoặc ngày" aria-label="Tìm clip"><section id="list"></section><button id="logout">Đăng xuất</button></main><p role="status" id="msg"></p>
 <script>
 const $=id=>document.getElementById(id), say=s=> $('msg').textContent=s;
 const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -14,6 +14,80 @@ $('camera').onclick=async()=>{const b=$('camera');b.disabled=true;try{if(!window
 $('scan').onclick=async()=>{try{const codes=await new BarcodeDetector().detect($('src'));if(codes.length)$('order').value=codes[0].rawValue.slice(0,64);else say('Đưa tem vào gần rồi bấm quét lại.')}catch{say('Hãy nhập mã trên tem.')}};
 function show(blob,name){if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(blob);const a=document.createElement('a'),v=document.createElement('video');v.controls=true;v.playsInline=true;v.src=url;a.href=url;a.download=name;a.className='download';a.textContent='Tải clip về máy';$('latest').replaceChildren(v,a)}
 function refresh(){if(!db)return;const l=$('list');l.replaceChildren();const r=db.transaction('clips').objectStore('clips').openCursor(null,'prev');const q=$('query').value.toLowerCase(),token=++refresh.seq;r.onsuccess=()=>{if(token!==refresh.seq)return;const cur=r.result;if(!cur)return;const item=cur.value;if(item.name.toLowerCase().includes(q)){const b=document.createElement('button');b.textContent=item.name;b.onclick=async()=>{try{const data=await crypto.subtle.decrypt({name:'AES-GCM',iv:item.iv},key,item.data);show(new Blob([data],{type:item.type}),item.name);$('latest').scrollIntoView()}catch{say('Không mở được clip.')}};l.append(b)}cur.continue()}}refresh.seq=0;$('query').oninput=refresh;
-$('record').onclick=()=>{const code=$('order').value.trim();if(!code){$('order').focus();say('Nhập mã vận đơn trước khi quay.');return}try{const chunks=[],stamp=clock.format(Date.now()).replace(/[ :]/g,'-');const mime=['video/mp4','video/webm;codecs=vp8','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));output=$('screen').captureStream(24);rec=new MediaRecorder(output,mime?{mimeType:mime}:undefined);rec.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};rec.onstop=async()=>{output.getTracks().forEach(t=>t.stop());$('stop').disabled=true;try{const type=rec.mimeType||chunks[0]?.type,blob=new Blob(chunks,{type});if(!blob.size)throw Error();const name=code.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+stamp+(type.includes('mp4')?'.mp4':'.webm');show(blob,name);say('Đang lưu clip…');const iv=crypto.getRandomValues(new Uint8Array(12)),data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,await blob.arrayBuffer());const tx=db.transaction('clips','readwrite');tx.objectStore('clips').add({id:Date.now(),iv,data,type,name});await new Promise((ok,no)=>{tx.oncomplete=ok;tx.onabort=no;tx.onerror=no});refresh();say('Đã lưu trong trình duyệt. Bấm Tải clip về máy để giữ bản riêng.')}catch{say(chunks.length?'Chưa lưu được vào kho. Hãy tải ngay clip vừa quay.':'Camera chưa ghi được dữ liệu.')}finally{$('record').disabled=$('order').disabled=$('logout').disabled=$('scan').disabled=false}};rec.start(1000);$('record').disabled=$('order').disabled=$('logout').disabled=$('scan').disabled=true;$('stop').disabled=false;say('Đang quay đơn '+code)}catch{output?.getTracks().forEach(t=>t.stop());say('Trình duyệt chưa ghi được video.')}};
-$('stop').onclick=()=>{if(rec?.state==='recording')rec.stop()};document.addEventListener('visibilitychange',()=>{if(document.hidden&&rec?.state==='recording')rec.stop()});$('logout').onclick=()=>location.reload();
+let state='ready', stopCurrent;
+function setState(next,message){
+  state=next;
+  const busy=next!=='ready';
+  $('record').hidden=busy;
+  $('record').disabled=busy;
+  $('stop').hidden=!busy;
+  $('stop').disabled=next!=='recording';
+  $('stop').textContent=next==='recording'?'Dừng và lưu clip':'Đang lưu clip…';
+  for(const id of ['order','logout','scan']) $(id).disabled=busy;
+  $('progress').textContent=message;
+}
+async function saveClip(blob,name){
+  show(blob,name);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,await blob.arrayBuffer());
+  const tx=db.transaction('clips','readwrite');
+  tx.objectStore('clips').add({id:Date.now(),iv,data,type:blob.type,name});
+  await new Promise((resolve,reject)=>{
+    tx.oncomplete=resolve;
+    tx.onerror=tx.onabort=reject;
+  });
+  refresh();
+}
+$('record').onclick=()=>{
+  if(state!=='ready')return;
+  const code=$('order').value.trim();
+  if(!code){$('order').focus();say('Nhập mã vận đơn trước khi quay.');return}
+  let capture, recorder, timer, finishing=false;
+  const chunks=[];
+  const stamp=clock.format(Date.now()).replace(/[ :]/g,'-');
+  async function finish(partial=false){
+    if(finishing)return;
+    finishing=true;
+    clearTimeout(timer);
+    capture?.getTracks().forEach(t=>t.stop());
+    setState('saving','Đang lưu clip…');
+    let message;
+    try{
+      if(!chunks.length){message='Chưa nhận được hình từ camera. Hãy quay lại đơn này.';return}
+      const type=chunks[0].type||recorder.mimeType||'video/webm';
+      const name=code.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+stamp+(type.includes('mp4')?'.mp4':'.webm');
+      await saveClip(new Blob(chunks,{type}),name);
+      message=partial?'Đã lưu phần dữ liệu nhận được. Hãy phát lại để kiểm tra.':'Đã lưu clip '+code+'.';
+    }catch{message='Chưa lưu được vào kho. Hãy bấm Tải clip về máy ngay.'}
+    finally{
+      stopCurrent=null;
+      setState('ready',message);
+      say(message);
+    }
+  }
+  try{
+    capture=$('screen').captureStream(24);
+    const mime=['video/webm;codecs=vp8','video/mp4','video/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+    recorder=new MediaRecorder(capture,mime?{mimeType:mime}:undefined);
+    recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+    recorder.onstop=()=>finish();
+    stopCurrent=()=>{
+      if(state!=='recording')return;
+      setState('saving','Đang kết thúc bản ghi…');
+      try{if(recorder.state!=='inactive')recorder.stop()}catch{finish(true);return}
+      timer=setTimeout(()=>finish(true),10000);
+    };
+    recorder.onerror=()=>stopCurrent?.();
+    recorder.start(1000);
+    setState('recording','Đang quay đơn '+code);
+    say('');
+  }catch{
+    capture?.getTracks().forEach(t=>t.stop());
+    stopCurrent=null;
+    setState('ready','Camera chưa bắt đầu ghi. Hãy mở lại trang rồi thử lại.');
+  }
+};
+$('stop').onclick=()=>stopCurrent?.();
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCurrent?.()});
+$('logout').onclick=()=>location.reload();
 </script></html>
