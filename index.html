@@ -1,19 +1,90 @@
 <!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kim Flora · Quay đơn</title>
-<style>*{box-sizing:border-box}body{margin:auto;max-width:640px;padding:24px;background:#f5f2eb;color:#263d34;font:16px/1.5 system-ui}header{font-family:Georgia,serif;font-size:25px;border-bottom:1px solid #c5cbc0;padding:10px 0}h1{font:normal 36px Georgia,serif}input,button,a.download{font:inherit;border:1px solid #99a79b;border-radius:9px;padding:12px;margin:5px 0}input{width:100%;background:white}button,a.download{background:#264c40;color:white;cursor:pointer}button:disabled{opacity:.45}canvas,video{width:100%;border-radius:12px;background:#19231f}#src{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}article{border-top:1px solid #ccc;padding:12px 0}small{display:block}a.download{display:inline-block;text-decoration:none}[hidden]{display:none!important}#screen{display:block;max-height:54vh;object-fit:contain}.controls{position:sticky;bottom:0;z-index:5;background:#f5f2eb;padding:8px 0 max(8px,env(safe-area-inset-bottom));display:grid}.controls button{min-height:52px}#stop{background:#943d34}</style>
+<style>*{box-sizing:border-box}body{margin:auto;max-width:640px;padding:24px;background:#f5f2eb;color:#263d34;font:16px/1.5 system-ui}header{font-family:Georgia,serif;font-size:25px;border-bottom:1px solid #c5cbc0;padding:10px 0}h1{font:normal 36px Georgia,serif}input,button,a.download{font:inherit;border:1px solid #99a79b;border-radius:9px;padding:12px;margin:5px 0}input{width:100%;background:white}button,a.download{background:#264c40;color:white;cursor:pointer}button:disabled{opacity:.45}canvas,video{width:100%;border-radius:12px;background:#19231f}#src{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}article{border-top:1px solid #ccc;padding:12px 0}small{display:block}a.download{display:inline-block;text-decoration:none}[hidden]{display:none!important}#screen{display:block;max-height:54vh;object-fit:contain}.controls{position:sticky;bottom:0;z-index:5;background:#f5f2eb;padding:8px 0 max(8px,env(safe-area-inset-bottom));display:grid}.controls button{min-height:52px}#stop{background:#943d34}details{margin-top:24px;padding:16px;background:#fff;border:1px solid #d6dcd4;border-radius:12px}summary{font-weight:650;cursor:pointer}#list button{display:block;background:white;color:#264c40;border-color:#ced7ce;text-align:left;width:100%;overflow-wrap:anywhere}#latest video{max-height:52vh}#tgstate{overflow-wrap:anywhere}</style>
 <header>Kim Flora</header><form id="login"><h1>Đăng nhập</h1><label>Mật khẩu của shop<input id="pw" type="password" required autocomplete="current-password"></label><button>Đăng nhập</button></form>
-<main hidden id="app"><h1>Quay đơn đóng gói</h1><label>Mã vận đơn<input id="order" maxlength="64" placeholder="Nhập mã trên tem"></label><button id="camera">Mở camera sau</button> <button id="scan" hidden>Quét mã</button><video id="src" muted playsinline></video><canvas hidden id="screen"></canvas><div class="controls"><span id="progress" role="status"></span><button type="button" disabled id="record">Bắt đầu quay</button><button type="button" hidden id="stop">Dừng và lưu clip</button></div><small>Giữ màn hình mở trong lúc quay. Clip ghi hình không kèm âm thanh.</small><section id="latest"></section><h2>Clip trên máy này</h2><input id="query" placeholder="Tìm theo mã hoặc ngày" aria-label="Tìm clip"><section id="list"></section><button id="logout">Đăng xuất</button></main><p role="status" id="msg"></p>
+<main hidden id="app"><h1>Quay đơn đóng gói</h1><label>Mã vận đơn<input id="order" maxlength="64" placeholder="Nhập mã trên tem"></label><button id="camera">Mở camera sau</button> <button id="scan" hidden>Quét mã</button><video id="src" muted playsinline></video><canvas hidden id="screen"></canvas><div class="controls"><span id="progress" role="status"></span><button type="button" disabled id="record">Bắt đầu quay</button><button type="button" hidden id="stop">Dừng và lưu clip</button></div><small>Giữ màn hình mở trong lúc quay. Clip ghi hình không kèm âm thanh.</small><section id="latest"></section><details id="tg"><summary>Kết nối Telegram</summary><p>Dùng bot riêng của shop. Thêm bot vào nhóm nhận clip trước khi kết nối.</p><label>Bot token<input id="token" type="password" autocomplete="off"></label><label>ID nhóm hoặc kênh Telegram<input id="chat" placeholder="-100…" autocomplete="off"></label><button id="connect">Kiểm tra và lưu kết nối</button><button id="disconnect">Ngắt kết nối</button><p id="tgstate" role="status"></p></details><h2>Tra cứu clip theo mã đơn</h2><input id="query" placeholder="Tìm theo mã hoặc ngày" aria-label="Tìm clip"><section id="list"></section><button id="logout">Đăng xuất</button></main><p role="status" id="msg"></p>
 <script>
 const $=id=>document.getElementById(id), say=s=> $('msg').textContent=s;
 const bytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 let key,db,stream,rec,frame,url,output;
 const clock=new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Ho_Chi_Minh',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'});
 function database(){return new Promise((ok,no)=>{const r=indexedDB.open('kimflora-recorder-v1',1);r.onupgradeneeded=()=>r.result.createObjectStore('clips',{keyPath:'id'});r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
-$('login').onsubmit=async e=>{e.preventDefault();try{const material=await crypto.subtle.importKey('raw',new TextEncoder().encode($('pw').value),'PBKDF2',false,['deriveKey']);key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:bytes('4hcF1KB+rPER/mh0Ka95fw=='),iterations:600000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);key=await crypto.subtle.importKey('raw',await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes('4qKXXESBzGxLx+dt')},key,bytes('673l58B2C4tI7mc/B1JTo/eiRkT6lxFMrg1adXMRG9TfSZiXGi0H/PA+6vxs4cGr')),{name:'AES-GCM'},false,['encrypt','decrypt'])}catch{key=null;say('Mật khẩu chưa đúng.');return} $('pw').value='';$('login').hidden=true;$('app').hidden=false;say('');try{db=await database();refresh()}catch{say('Bộ nhớ trình duyệt chưa khả dụng. Hãy tải từng clip về máy.')}};
+$('login').onsubmit=async e=>{e.preventDefault();try{const material=await crypto.subtle.importKey('raw',new TextEncoder().encode($('pw').value),'PBKDF2',false,['deriveKey']);key=await crypto.subtle.deriveKey({name:'PBKDF2',salt:bytes('4hcF1KB+rPER/mh0Ka95fw=='),iterations:600000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);key=await crypto.subtle.importKey('raw',await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes('4qKXXESBzGxLx+dt')},key,bytes('673l58B2C4tI7mc/B1JTo/eiRkT6lxFMrg1adXMRG9TfSZiXGi0H/PA+6vxs4cGr')),{name:'AES-GCM'},false,['encrypt','decrypt'])}catch{key=null;say('Mật khẩu chưa đúng.');return} $('pw').value='';$('login').hidden=true;$('app').hidden=false;say('');await restoreTelegram();try{db=await database();refresh()}catch{say('Bộ nhớ trình duyệt chưa khả dụng. Hãy tải từng clip về máy.')}};
 function draw(){const c=$('screen'),v=$('src'),g=c.getContext('2d');g.drawImage(v,0,0,c.width,c.height);const f=Math.max(18,Math.round(c.width/33));g.fillStyle='rgba(0,0,0,.75)';g.fillRect(0,c.height-f*3,c.width,f*3);g.fillStyle='white';g.font='bold '+f+'px sans-serif';g.fillText($('order').value,12,c.height-f*1.6,c.width-24);g.fillText(clock.format(Date.now())+'  GMT+7',12,c.height-f*.35,c.width-24);frame=requestAnimationFrame(draw)}
 $('camera').onclick=async()=>{const b=$('camera');b.disabled=true;try{if(!window.MediaRecorder||!$('screen').captureStream)throw Error();stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});const v=$('src');v.srcObject=stream;await v.play();const c=$('screen');c.width=v.videoWidth;c.height=v.videoHeight;c.hidden=false;draw();$('record').disabled=false;$('scan').hidden=!window.BarcodeDetector;say('Camera đã sẵn sàng.')}catch{stream?.getTracks().forEach(t=>t.stop());b.disabled=false;say('Chưa mở được camera. Kiểm tra quyền camera và mở bằng Safari hoặc Chrome.')}};
 $('scan').onclick=async()=>{try{const codes=await new BarcodeDetector().detect($('src'));if(codes.length)$('order').value=codes[0].rawValue.slice(0,64);else say('Đưa tem vào gần rồi bấm quét lại.')}catch{say('Hãy nhập mã trên tem.')}};
 function show(blob,name){if(url)URL.revokeObjectURL(url);url=URL.createObjectURL(blob);const a=document.createElement('a'),v=document.createElement('video');v.controls=true;v.playsInline=true;v.src=url;a.href=url;a.download=name;a.className='download';a.textContent='Tải clip về máy';$('latest').replaceChildren(v,a)}
-function refresh(){if(!db)return;const l=$('list');l.replaceChildren();const r=db.transaction('clips').objectStore('clips').openCursor(null,'prev');const q=$('query').value.toLowerCase(),token=++refresh.seq;r.onsuccess=()=>{if(token!==refresh.seq)return;const cur=r.result;if(!cur)return;const item=cur.value;if(item.name.toLowerCase().includes(q)){const b=document.createElement('button');b.textContent=item.name;b.onclick=async()=>{try{const data=await crypto.subtle.decrypt({name:'AES-GCM',iv:item.iv},key,item.data);show(new Blob([data],{type:item.type}),item.name);$('latest').scrollIntoView()}catch{say('Không mở được clip.')}};l.append(b)}cur.continue()}}refresh.seq=0;$('query').oninput=refresh;
+let telegram=null;
+const configKey='qlcam-telegram-v1';
+function tgStatus(message){$('tgstate').textContent=message}
+async function restoreTelegram(){
+  try{
+    const config=JSON.parse(localStorage.getItem(configKey));
+    if(!config){tgStatus('Chưa kết nối Telegram.');return}
+    const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(config.iv)},key,new Uint8Array(config.data));
+    telegram=JSON.parse(new TextDecoder().decode(plain));
+    tgStatus('Tự gửi đến '+telegram.title);
+  }catch{tgStatus('Hãy kết nối lại Telegram.')}
+}
+async function telegramCall(token,method,body){
+  const response=await fetch('https://api.telegram.org/bot'+token+'/'+method,{method:'POST',body,referrerPolicy:'no-referrer'});
+  const result=await response.json();
+  if(!result.ok)throw Error(result.description||'Telegram chưa nhận.');
+  return result.result;
+}
+$('connect').onclick=async()=>{
+  const token=$('token').value.trim(),chat=$('chat').value.trim();
+  if(!/^\d+:[A-Za-z0-9_-]+$/.test(token)||!chat){tgStatus('Nhập token và ID nhóm hoặc kênh.');return}
+  try{
+    const group=await telegramCall(token,'getChat',new URLSearchParams({chat_id:chat}));
+    const config={token,chat:String(group.id),title:group.title||group.first_name||chat};
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,new TextEncoder().encode(JSON.stringify(config)));
+    localStorage.setItem(configKey,JSON.stringify({iv:[...iv],data:[...new Uint8Array(data)]}));
+    telegram=config;$('token').value='';tgStatus('Tự gửi đến '+config.title);
+  }catch{tgStatus('Kết nối thất bại. Kiểm tra token, ID và quyền của bot.')}
+};
+$('disconnect').onclick=()=>{telegram=null;localStorage.removeItem(configKey);tgStatus('Đã ngắt Telegram trên máy này.')};
+async function sendClip(blob,name,code){
+  if(!telegram)throw Error('Chưa kết nối Telegram.');
+  if(blob.size>50000000)throw Error('Clip vượt 50 MB. Hãy tải về và gửi thủ công.');
+  const form=new FormData();form.set('chat_id',telegram.chat);form.set('caption','Mã đơn '+code+'\n'+name);form.set('document',blob,name);
+  return telegramCall(telegram.token,'sendDocument',form);
+}
+function retryButton(blob,name,code){
+  const b=document.createElement('button');b.textContent='Gửi clip sang Telegram';
+  b.onclick=async()=>{b.disabled=true;try{await sendClip(blob,name,code);b.textContent='Telegram đã nhận clip'}catch(e){b.disabled=false;say(e.message)}};
+  $('latest').append(b);
+}
+function refresh(){
+  if(!db)return;
+  const list=$('list');list.replaceChildren();
+  const query=$('query').value.trim().toLowerCase(),groups=new Map(),token=++refresh.seq;
+  const request=db.transaction('clips').objectStore('clips').openKeyCursor(null,'prev');
+  // Read records incrementally so the index never retains video buffers.
+  request.onsuccess=()=>{
+    if(token!==refresh.seq)return;
+    const cursor=request.result;
+    if(!cursor){if(!list.children.length)list.textContent=query?'Không tìm thấy clip trên máy này.':'Chưa có clip trên máy này.';return}
+    const read=cursor.source.get(cursor.primaryKey);
+    read.onsuccess=()=>{
+      if(token!==refresh.seq)return;
+      const {id,name,code:stored}=read.result;
+      const code=stored||name.replace(/_\d{4}-\d{2}-\d{2}.*$/,'');
+      if(name.toLowerCase().includes(query)||code.toLowerCase().includes(query)){
+        if(!groups.has(code)){const group=document.createElement('details'),summary=document.createElement('summary');summary.textContent=code;group.append(summary);list.append(group);groups.set(code,group)}
+        const b=document.createElement('button');b.textContent=name;
+        b.onclick=async()=>{try{
+          const row=await new Promise((ok,no)=>{const r=db.transaction('clips').objectStore('clips').get(id);r.onsuccess=()=>ok(r.result);r.onerror=no});
+          const data=await crypto.subtle.decrypt({name:'AES-GCM',iv:row.iv},key,row.data);
+          const blob=new Blob([data],{type:row.type});show(blob,name);retryButton(blob,name,code);$('latest').scrollIntoView()
+        }catch{say('Không mở được clip.')}};
+        groups.get(code).append(b);
+      }
+      cursor.continue();
+    };
+  };
+}
+refresh.seq=0;$('query').oninput=refresh;
 let state='ready', stopCurrent;
 function setState(next,message){
   state=next;
@@ -26,12 +97,12 @@ function setState(next,message){
   for(const id of ['order','logout','scan']) $(id).disabled=busy;
   $('progress').textContent=message;
 }
-async function saveClip(blob,name){
+async function saveClip(blob,name,code){
   show(blob,name);
   const iv=crypto.getRandomValues(new Uint8Array(12));
   const data=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,await blob.arrayBuffer());
   const tx=db.transaction('clips','readwrite');
-  tx.objectStore('clips').add({id:Date.now(),iv,data,type:blob.type,name});
+  tx.objectStore('clips').add({id:Date.now(),iv,data,type:blob.type,name,code});
   await new Promise((resolve,reject)=>{
     tx.oncomplete=resolve;
     tx.onerror=tx.onabort=reject;
@@ -56,8 +127,15 @@ $('record').onclick=()=>{
       if(!chunks.length){message='Chưa nhận được hình từ camera. Hãy quay lại đơn này.';return}
       const type=chunks[0].type||recorder.mimeType||'video/webm';
       const name=code.replace(/[^a-zA-Z0-9_-]/g,'_')+'_'+stamp+(type.includes('mp4')?'.mp4':'.webm');
-      await saveClip(new Blob(chunks,{type}),name);
-      message=partial?'Đã lưu phần dữ liệu nhận được. Hãy phát lại để kiểm tra.':'Đã lưu clip '+code+'.';
+      const blob=new Blob(chunks,{type});
+      await saveClip(blob,name,code);
+      retryButton(blob,name,code);
+      message=partial?'Đã lưu phần dữ liệu nhận được. Hãy phát lại để kiểm tra.':'Đã lưu clip '+code+' trên máy.';
+      if(telegram){
+        setState('saving','Đã lưu trên máy. Đang gửi Telegram…');
+        try{await sendClip(blob,name,code);message+=' Telegram đã nhận.'}
+        catch(e){message+=' Chưa gửi Telegram. '+e.message}
+      }
     }catch{message='Chưa lưu được vào kho. Hãy bấm Tải clip về máy ngay.'}
     finally{
       stopCurrent=null;
